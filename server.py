@@ -103,9 +103,19 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 def main():
+
     STATIC_DIR.mkdir(exist_ok=True)
-    httpd = ThreadingHTTPServer((HOST, PORT), Handler)
-    print(f"Serving medical RAG chat at http://{HOST}:{PORT}")
+
+    port = int(os.environ.get("PORT", 8765))
+
+    host = "0.0.0.0"
+
+    print(f"Binding to {host}:{port}", flush=True)
+
+    httpd = ThreadingHTTPServer((host, port), Handler)
+
+    print(f"Serving medical RAG chat at http://{host}:{port}", flush=True)
+
     httpd.serve_forever()
 
 
