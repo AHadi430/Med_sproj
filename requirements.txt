@@ -1,0 +1,9 @@
+google-genai
+groq
+chromadb
+trafilatura
+numpy
+sentence-transformers
+python-dotenv
+requests
+python-docx
