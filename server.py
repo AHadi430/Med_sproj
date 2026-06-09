@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parent
 STATIC_DIR = ROOT / "static"
-HOST = "127.0.0.1"
+HOST = "0.0.0.0"
 PORT = int(os.getenv("PORT", "8765"))
 
 
