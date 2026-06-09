@@ -526,7 +526,7 @@
       send.disabled = true;
       statusText.textContent = "Running pipeline";
       try {
-        const res = await fetch("https://med-sproj.onrender.com//api/chat", {
+        const res = await fetch("https://med-sproj.onrender.com/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ query: text, debug: false })
