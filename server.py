@@ -97,9 +97,16 @@ class Handler(SimpleHTTPRequestHandler):
                 return
 
             from pipeline import run_pipeline
+            
+            print(f"Received query: {query}", flush=True)
 
-            out = run_pipeline(query, debug=debug)
-            self._json(200, {"ok": True, "result": _safe_result(out)})
+            try:
+                out = run_pipeline(query, debug=debug)
+                print("Pipeline completed successfully", flush=True)
+                self._json(200, {"ok": True, "result": _safe_result(out)})
+            except Exception:
+                print(traceback.format_exc(), flush=True)
+                raise
         except Exception as exc:
             self._json(500, {
                 "ok": False,
