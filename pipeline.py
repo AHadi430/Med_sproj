@@ -27,15 +27,15 @@ GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 MODEL_EMB  = os.getenv("MODEL_EMB", "gemini-embedding-001")
 EMBED_DIM   = 768
 
-TOPK = 40
-TOPN_WEB = 40
-CHUNK_SIZE = 1100
-CHUNK_OVERLAP = 120
-BATCH_SIZE = 6
+TOPK = 20
+TOPN_WEB = 15
+CHUNK_SIZE = 800
+CHUNK_OVERLAP = 80
+BATCH_SIZE = 3
 MAX_CONTEXT_TOKENS = 6500
 MIN_RELIABILITY_SCORE = 0.60
 
-# ───────────────────────── LAZY MODELS (CRITICAL FIX) ─────────────────────────
+# ───────────────────────── LAZY MODELS (MEMORY OPTIMIZED) ─────────────────────────
 
 _st_model = None
 _reranker = None
@@ -44,15 +44,35 @@ def get_st_model():
     global _st_model
     if _st_model is None:
         from sentence_transformers import SentenceTransformer
-        _st_model = SentenceTransformer("all-MiniLM-L6-v2")
+        import torch
+        torch.cuda.empty_cache() if torch.cuda.is_available() else None
+        _st_model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
+        _st_model.eval()
     return _st_model
 
 def get_reranker():
     global _reranker
     if _reranker is None:
         from sentence_transformers import CrossEncoder
-        _reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+        import torch
+        torch.cuda.empty_cache() if torch.cuda.is_available() else None
+        _reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2", device="cpu")
+        _reranker.eval()
     return _reranker
+
+def cleanup_models():
+    global _st_model, _reranker
+    import gc
+    if _st_model:
+        _st_model = None
+    if _reranker:
+        _reranker = None
+    gc.collect()
+    try:
+        import torch
+        torch.cuda.empty_cache()
+    except:
+        pass
 
 # ───────────────────────── CACHE ─────────────────────────
 
@@ -198,17 +218,19 @@ def rerank(query, hits):
 
 def ingest(query):
     urls = search_google(query, TOPN_WEB)
+    if not urls:
+        return 0
 
     def worker(u):
         text = fetch(u["url"])
         if not text:
             return 0
-        chunks = chunk(text)[:8]
+        chunks = chunk(text)[:4]
         return upsert(u["url"], u.get("title", ""), chunks)
 
     stored = 0
 
-    with ThreadPoolExecutor(max_workers=3) as ex:
+    with ThreadPoolExecutor(max_workers=2) as ex:  # Reduced from 3
         for r in ex.map(worker, urls[:TOPN_WEB]):
             stored += r
 
@@ -229,17 +251,28 @@ def llm(prompt):
 # ───────────────────────── PIPELINE ─────────────────────────
 
 def run_pipeline(query):
+    import gc
+    gc.collect()
+    
     hits = rerank(query, retrieve(query))
+    top = hits[:5]  # Reduced from 8
 
-    top = hits[:8]
-
-    if len(top) < 2:
-        ingest(query)
-        hits = rerank(query, retrieve(query))
-        top = hits[:8]
+    # Only ingest if we have very few results AND enough memory
+    import psutil
+    mem = psutil.virtual_memory()
+    if len(top) < 2 and mem.available > 100_000_000:  # Only if >100MB free
+        try:
+            ingest(query)
+            hits = rerank(query, retrieve(query))
+            top = hits[:5]
+        except:
+            pass
+    
+    cleanup_models()
+    gc.collect()
 
     context = "\n\n".join(
-        f"[{i+1}] {h['meta'].get('url','')}\n{h['text'][:1200]}"
+        f"[{i+1}] {h['meta'].get('url','')}\n{h['text'][:800]}"
         for i, h in enumerate(top)
     )
 
@@ -253,6 +286,10 @@ answer using only context with citations [1], [2]
 """
 
     answer = llm(prompt)
+    
+    cleanup_models()
+    gc.collect()
+    
     return {
         "mode": "hybrid",
         "answer": answer,
