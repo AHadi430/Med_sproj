@@ -252,7 +252,15 @@ context:
 answer using only context with citations [1], [2]
 """
 
-    return llm(prompt)
+    answer = llm(prompt)
+    return {
+        "mode": "hybrid",
+        "answer": answer,
+        "query_type": "medical",
+        "query_used": query,
+        "expanded": len(top) >= 2,
+        "hits": top,
+    }
 
 # ───────────────────────── CLEANUP HELPERS ─────────────────────────
 
